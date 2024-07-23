@@ -4,11 +4,15 @@
 #include "esp_task_wdt.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <EEPROM.h>
 #include <ButtonManager.h>
 #include "pin.h"
 #include <MUwrapper.hpp>
 #include <wiiClassic.h>
 #include <controller.h>
+
+
+#define DATA_VERSION "DATA1.0"
 
 TaskHandle_t Main_Handle = NULL;
 TaskHandle_t Mu_Handle = NULL;
@@ -27,23 +31,31 @@ Packetizer packetizer;
 struct QueueData{
   uint8_t Mudata[12];
   uint8_t len;
-  int config[5];
+  int config[7];
 
 };
 enum mu_config_items{
-  userid,
-  groupid,
-  deviceid,
-  targetid,
-  channel ,
-  mode
+  UserID,
+  GroupID,
+  DeviceID,
+  TargetID,
+  Channel ,
+  Mode,
+  Frequency
 };
 
 struct ConfigData{
-  int configdata[5];
+  int configdata[7];
 };
 
-uint8_t generate_mudata(uint8_t *buf, bool emergency){//最大１２バイト
+struct EEPROM_data{
+  int config[7];
+  char check[10];
+};
+
+int frequency = 20;
+
+uint8_t generate_mudata(uint8_t *buf, bool emergency,int mode){//最大１２バイト
 
   if(emergency){  //非常停止aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     buf[0] = 'E';
@@ -54,10 +66,13 @@ uint8_t generate_mudata(uint8_t *buf, bool emergency){//最大１２バイト
     p=controller_main[0].packetize(packetizer);
     memcpy(buf,p.data,5);
     buf[5] = 0x0;
-    // packetizer.init(p);
-    // p=controller_main[1].packetize(packetizer);
-    // memcpy(buf+6,p.data,5);
-    // buf[11] = 0x0;
+    if (mode == 12){
+      packetizer.init(p);
+      p=controller_main[1].packetize(packetizer);
+      memcpy(buf+6,p.data,5);
+      buf[11] = 0x0;
+      return 12;
+    }
 
     return 5;
   }
@@ -102,7 +117,7 @@ void main_task(void *pvParameters) {
       xQueueReceive(controller1_TO_mainQueue, &controller_main[1],1);
       xQueueReceive(config_TO_mainQueue, &result_config,1);
 
-      queue_send_data.len = generate_mudata(Mudata, !btn2.isHold(0));
+      queue_send_data.len = generate_mudata(Mudata, !btn2.isHold(0),result_config.configdata[Mode]);
       memcpy(&queue_send_data.config, &result_config.configdata, sizeof(result_config.configdata));
       memcpy(&queue_send_data.Mudata, &Mudata, sizeof(Mudata));
       
@@ -144,7 +159,7 @@ void Mu(void *pvParameters){
 
   while (1){
 
-    if (millis() - lasttime > 20){
+    if (millis() - lasttime > frequency){
       
       xQueueReceive(main_TO_MuQueue,&queue_data,0);
 
@@ -152,10 +167,6 @@ void Mu(void *pvParameters){
         Serial.printf("%d ",queue_data.Mudata[i]);
       }
       Serial.print("\n");
-
-      if (lastconfig != queue_data.config){
-        // mu.setParams(queue_data.config[groupid],queue_data.config[channel],queue_data.config[targetid],queue_data.config[deviceid]);
-      }
 
       //送信
       mu.send(queue_data.Mudata,queue_data.len);
@@ -180,27 +191,39 @@ void Display(void *pvParameters){
   int page = 0;
 
   
-  String menu_items[6] = {
+  String menu_items[7] = {
     "userid",
     "groupid",
     "deviceid",
     "targetid",
     "channel" ,
-    "mode"
+    "mode",
+    "frequency"
   };
-  int config_items[6][4] ={
+  int config_items[7][4] ={
     {1, 2, 3, 4},
     {1, 2, 3, 4},
     {0, 1, 2, 4},
     {0, 1, 2, 4},
     {8, 14, 31, 46},
-    {5,12,5,12}
+    {5,12,5,12},
+    {20,40,60,1000}
   };
 
   ConfigData result_config;
+  int default_config[7] ={0,3,0,1,0,0,0};
+  int config[7];
+  EEPROM_data eeprom_data;
+  
+  EEPROM.get(0,eeprom_data);
+  if (strcmp(eeprom_data.check, DATA_VERSION)) { //バージョンをチェック
+    //保存データが無い場合デフォルトを設定
+    memcpy(&eeprom_data.config, &default_config, sizeof(int));
+  }
 
+  memcpy(&config, &eeprom_data.config, sizeof(int));
+  
 
-  int config[6] ={0,3,0,1,0,0};
   int select_menu_count = 0;
   
   //コントローラー
@@ -233,7 +256,6 @@ void Display(void *pvParameters){
     FRONT_BTND = 3//SW4
   };
 
-  
 
   while (1){
     btn.update();
@@ -246,7 +268,7 @@ void Display(void *pvParameters){
         display.setCursor(0, 0);            //テキストの表示開始位置
         display.print("CH");         //表示文字列
         display.setCursor(0, 25);
-        display.printf("%02x",config_items[channel][config[4]]);
+        display.printf("%02x",config_items[Channel][config[4]]);
 
       }else if (menu == true){
 
@@ -257,12 +279,12 @@ void Display(void *pvParameters){
         display.print("MENU");
         display.drawLine(0,10,128,10,WHITE);
 
-        for (int i =page*5; i < (page+1)*5; i++){
+        for (int i =page*5; i < 7; i++){
 
-          display.setCursor(2, 10*(i+1)+1);
+          display.setCursor(2, 10*(i-(page*5)+1)+1);
 
           if (i == select_menu_count){
-            display.fillRect(0, 10*(i+1), 52, 10, WHITE);
+            display.fillRect(0, 10*(i-(page*5)+1), 52, 10, WHITE);
             display.setTextColor(INVERSE);  //色指定はできないが必要
             display.print(menu_items[i]);
 
@@ -272,12 +294,12 @@ void Display(void *pvParameters){
             
           }
 
-          display.fillRect(98, 10*(i+1), 14, 10, WHITE);
+          display.fillRect(98, 10*(i-(page*5)+1), 14, 10, WHITE);
           display.setTextColor(SSD1306_INVERSE);
-          display.setCursor(100, 10*(i+1)+1);
+          display.setCursor(100, 10*(i-(page*5)+1)+1);
           display.printf("%02x",config_items[i][config[i]]);
 
-          display.drawLine(0,10*(i+2),128,10*(i+2),WHITE);
+          display.drawLine(0,10*(i-(page*5)+2),128,10*(i-(page*5)+2),WHITE);
         }
       }
 
@@ -303,13 +325,20 @@ void Display(void *pvParameters){
       menu = !menu;
       if (menu == false){
 
-        Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\n",config_items[userid][config[0]]
-        ,config_items[groupid][config[1]],config_items[deviceid][config[2]],config_items[targetid][config[3]],config_items[channel][config[4]],config_items[mode][config[5]]);
+        Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\nFrequency = %02x\n",config_items[UserID][config[0]],config_items[GroupID][config[1]],config_items[DeviceID][config[2]]
+        ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
 
 
-        for (int i = 0;i < 5;i++){
+        //EEPROMに設定を保存する。
+        strcpy(eeprom_data.check, DATA_VERSION);
+        memcpy(&eeprom_data.config, &config, sizeof(int));
+        EEPROM.put(0, eeprom_data);
+
+        for (int i = 0;i < 7;i++){
           result_config.configdata[i] = config_items[i][config[i]];
         }
+
+        frequency = config_items[Frequency][config[Frequency]];
         
         xQueueOverwrite(config_TO_mainQueue,&result_config);
       }
@@ -319,8 +348,8 @@ void Display(void *pvParameters){
     if (menu == true){
       if (btn.isPressed(FRONT_BTNB)){
         select_menu_count++;
+        select_menu_count = select_menu_count % 7;
         page = select_menu_count/5;
-        select_menu_count = select_menu_count % 6;
 
       }
       if (btn.isPressed(FRONT_BTNC)){
