@@ -211,17 +211,26 @@ void Display(void *pvParameters){
   };
 
   ConfigData result_config;
+
+
   int default_config[7] ={0,3,0,1,0,0,0};
   int config[7];
   EEPROM_data eeprom_data;
   
-  EEPROM.get(0,eeprom_data);
-  if (strcmp(eeprom_data.check, DATA_VERSION)) { //バージョンをチェック
-    //保存データが無い場合デフォルトを設定
-    memcpy(&eeprom_data.config, &default_config, sizeof(int));
+
+  EEPROM.begin(sizeof(EEPROM)+20U);
+  EEPROM.get(0, eeprom_data);
+  
+  // バージョンをチェック
+  if (strncmp(eeprom_data.check, DATA_VERSION, 8)) {
+    // 保存データが無い場合デフォルトを設定
+    memcpy(eeprom_data.config, default_config, sizeof(default_config));
+    strncpy(eeprom_data.check, DATA_VERSION, 8); // バージョン情報を設定
+    EEPROM.put(0, eeprom_data); // デフォルトデータをEEPROMに保存
   }
 
-  memcpy(&config, &eeprom_data.config, sizeof(int));
+  // 設定データをconfigにコピー
+  memcpy(config, eeprom_data.config, sizeof(config));
   
 
   int select_menu_count = 0;
@@ -329,10 +338,11 @@ void Display(void *pvParameters){
         ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
 
 
-        //EEPROMに設定を保存する。
+        // EEPROMに設定を保存する。
         strcpy(eeprom_data.check, DATA_VERSION);
-        memcpy(&eeprom_data.config, &config, sizeof(int));
+        memcpy(eeprom_data.config, config, sizeof(config));
         EEPROM.put(0, eeprom_data);
+        EEPROM.commit();   //EEPROMに書き込みx
 
         for (int i = 0;i < 7;i++){
           result_config.configdata[i] = config_items[i][config[i]];
