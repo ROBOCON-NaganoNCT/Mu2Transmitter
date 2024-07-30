@@ -14,5 +14,5 @@
 #define SW7 18
 #define Mu_TXD 35
 #define Mu_RXD 36
-#define Buzzer 38
+#define BUZZER 38
 #define Emergency 37

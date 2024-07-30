@@ -10,6 +10,8 @@
 #include <MUwrapper.hpp>
 #include <wiiClassic.h>
 #include <controller.h>
+#include <buzzer.h>
+#include <buzzer_score.h>
 
 
 #define DATA_VERSION "DATA1.0"
@@ -156,6 +158,7 @@ void Mu(void *pvParameters){
   mu.init(8);
 
   QueueData queue_data;
+  vTaskDelay(500);
 
   while (1){
 
@@ -190,6 +193,8 @@ void Display(void *pvParameters){
   int wiilasttime = 0;
   int page = 0;
 
+  buzzer::init();
+  int8_t player_index = buzzer::play(buzzer_score::potato,sizeof(buzzer_score::potato),10);
   
   String menu_items[7] = {
     "userid",
@@ -200,24 +205,21 @@ void Display(void *pvParameters){
     "mode",
     "frequency"
   };
-  int config_items[7][4] ={
-    {1, 2, 3, 4},
-    {1, 2, 3, 4},
-    {0, 1, 2, 4},
-    {0, 1, 2, 4},
-    {8, 14, 31, 46},
-    {5,12,5,12},
-    {20,40,60,1000}
+  int config_items[7][45] = {
+    {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45},
+    {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45},
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44},
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44},
+    {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46},
+    {5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5},
+    {10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40}
   };
 
+
   ConfigData result_config;
-
-
   int default_config[7] ={0,3,0,1,0,0,0};
   int config[7];
   EEPROM_data eeprom_data;
-  
-
   EEPROM.begin(sizeof(EEPROM)+20U);
   EEPROM.get(0, eeprom_data);
   
@@ -231,7 +233,16 @@ void Display(void *pvParameters){
 
   // 設定データをconfigにコピー
   memcpy(config, eeprom_data.config, sizeof(config));
+  Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\nFrequency = %02x\n",config_items[UserID][config[0]],config_items[GroupID][config[1]],config_items[DeviceID][config[2]]
+        ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
   
+  for (int i = 0;i < 7;i++){
+    result_config.configdata[i] = config_items[i][config[i]];
+  }
+
+  frequency = config_items[Frequency][config[Frequency]];
+        
+  xQueueOverwrite(config_TO_mainQueue,&result_config);
 
   int select_menu_count = 0;
   
@@ -246,7 +257,6 @@ void Display(void *pvParameters){
   Wire.begin();
   Wire1.begin();
   display.begin(SSD1306_SWITCHCAPVCC, SCREEN_I2C_ADDR);
-  display.setRotation(2);
   
 
   wii.init();
@@ -257,64 +267,79 @@ void Display(void *pvParameters){
   btn.add(SW6,20);
   btn.add(SW5,20);
   btn.add(SW4,20);
+  btn.add(Emergency,20);
 
   enum btn_name{
     FRONT_BTNA = 0,//SW7
     FRONT_BTNB = 1,//SW6
     FRONT_BTNC = 2,//SW5
-    FRONT_BTND = 3//SW4
+    FRONT_BTND = 3,//SW4
+    EMERGENCY_BTN = 4
   };
 
 
   while (1){
     btn.update();
+    buzzer::update();
     
     if (millis() - lasttime  > 100){
       display.clearDisplay();
-      if (menu == false){
-        display.setTextSize(2);               //フォントサイズは2(番目に小さい)
-        display.setTextColor(SSD1306_WHITE);  //色指定はできないが必要
-        display.setCursor(0, 0);            //テキストの表示開始位置
-        display.print("CH");         //表示文字列
-        display.setCursor(0, 25);
-        display.printf("%02x",config_items[Channel][config[4]]);
+      if (btn.isHold(EMERGENCY_BTN) == true){
+        buzzer::stopPlayer(player_index);
 
-      }else if (menu == true){
+        if (menu == false){
+          display.setTextSize(2);               //フォントサイズは2(番目に小さい)
+          display.setTextColor(SSD1306_WHITE);  //色指定はできないが必要
+          display.setCursor(0, 0);            //テキストの表示開始位置
+          display.print("CH");         //表示文字列
+          display.setCursor(0, 25);
+          display.printf("%02d",config_items[Channel][config[4]]);
+
+        }else if (menu == true){
 
 
-        display.setTextSize(1);               //フォントサイズは2(番目に小さい)
-        display.setTextColor(SSD1306_WHITE);  //色指定はできないが必要
-        display.setCursor(0, 0); 
-        display.print("MENU");
-        display.drawLine(0,10,128,10,WHITE);
+          display.setTextSize(1);               //フォントサイズは2(番目に小さい)
+          display.setTextColor(SSD1306_WHITE);  //色指定はできないが必要
+          display.setCursor(0, 0); 
+          display.print("MENU");
+          display.drawLine(0,10,128,10,WHITE);
 
-        for (int i =page*5; i < 7; i++){
+          for (int i =page*5; i < 7; i++){
 
-          display.setCursor(2, 10*(i-(page*5)+1)+1);
+            display.setCursor(2, 10*(i-(page*5)+1)+1);
 
-          if (i == select_menu_count){
-            display.fillRect(0, 10*(i-(page*5)+1), 52, 10, WHITE);
-            display.setTextColor(INVERSE);  //色指定はできないが必要
-            display.print(menu_items[i]);
+            if (i == select_menu_count){
+              display.fillRect(0, 10*(i-(page*5)+1), 52, 10, WHITE);
+              display.setTextColor(INVERSE);  //色指定はできないが必要
+              display.print(menu_items[i]);
 
-          }else{
-            display.setTextColor(SSD1306_WHITE);
-            display.print(menu_items[i]);
-            
+            }else{
+              display.setTextColor(SSD1306_WHITE);
+              display.print(menu_items[i]);
+              
+            }
+
+            display.fillRect(98, 10*(i-(page*5)+1), 28, 10, WHITE);
+            display.setTextColor(SSD1306_INVERSE);
+            display.setCursor(100, 10*(i-(page*5)+1)+1);
+            display.printf("%02d",config_items[i][config[i]]);
+
+            display.drawLine(0,10*(i-(page*5)+2),128,10*(i-(page*5)+2),WHITE);
           }
-
-          display.fillRect(98, 10*(i-(page*5)+1), 14, 10, WHITE);
-          display.setTextColor(SSD1306_INVERSE);
-          display.setCursor(100, 10*(i-(page*5)+1)+1);
-          display.printf("%02x",config_items[i][config[i]]);
-
-          display.drawLine(0,10*(i-(page*5)+2),128,10*(i-(page*5)+2),WHITE);
         }
+      }else{
+        player_index = buzzer::play(buzzer_score::potato,sizeof(buzzer_score::potato),10);
+        display.setTextSize(2);     
+        display.setCursor(10, 15);
+        display.fillRect(0, 0, 128, 64, WHITE);
+        display.setTextColor(SSD1306_INVERSE);
+        display.printf("EMERGENCY\n    BTN");
       }
 
       
 
       lasttime = millis();
+      display.display();
     }
 
     if (millis() - wiilasttime  > 15){
@@ -328,9 +353,12 @@ void Display(void *pvParameters){
 
       wiilasttime = millis();
     }
+
+    
     
 
     if (btn.isPressed(FRONT_BTNA)){
+      buzzer::buzz(442,100,255U);
       menu = !menu;
       if (menu == false){
 
@@ -342,7 +370,7 @@ void Display(void *pvParameters){
         strcpy(eeprom_data.check, DATA_VERSION);
         memcpy(eeprom_data.config, config, sizeof(config));
         EEPROM.put(0, eeprom_data);
-        EEPROM.commit();   //EEPROMに書き込みx
+        EEPROM.commit();   //EEPROMに書き込み
 
         for (int i = 0;i < 7;i++){
           result_config.configdata[i] = config_items[i][config[i]];
@@ -357,27 +385,28 @@ void Display(void *pvParameters){
     }
     if (menu == true){
       if (btn.isPressed(FRONT_BTNB)){
+        buzzer::buzz(442,100,255U);
         select_menu_count++;
         select_menu_count = select_menu_count % 7;
         page = select_menu_count/5;
 
       }
       if (btn.isPressed(FRONT_BTNC)){
+        buzzer::buzz(442,100,255U);
         config[select_menu_count]--;
         if (config[select_menu_count] < 0){
-          config[select_menu_count] = 3;
+          config[select_menu_count] = 44;
         }
 
       }
       if (btn.isPressed(FRONT_BTND)){
+        buzzer::buzz(442,100,255U);
         config[select_menu_count]++;
-        config[select_menu_count] = config[select_menu_count] % 4;
+        config[select_menu_count] = config[select_menu_count] % 45;
       }
     }
 
     
-
-    display.display();
     btn.release();
     vTaskDelay(1);
 
