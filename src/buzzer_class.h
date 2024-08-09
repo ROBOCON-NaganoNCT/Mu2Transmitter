@@ -78,7 +78,7 @@
     {
     public:
         Player(bool (*buzz)(uint16_t freq, uint16_t duration, uint8_t priority)) : _buzz(buzz){};
-        bool play(Note *score, uint8_t buflength, uint8_t priority = 0)
+        bool play(Note *score, uint8_t buflength, uint8_t priority = 0,bool autoloop=false)
         {
             if (_playing && _priority >= priority)
                 return false;
@@ -88,11 +88,13 @@
             _priority = priority;
             _start = millis();
             _playing = true;
+            _autoloop = autoloop;
             return true;
         }
         bool stop()
         {
             _playing = false;
+            _autoloop = false;
             return true;
         }
         bool update()
@@ -105,6 +107,10 @@
                 _scoreindex++;
                 if (_scoreindex >= _buflength)
                 {
+                    if(_autoloop){
+                        _scoreindex=0;
+                        return true;
+                    }
                     stop();
                     return false;
                 }
@@ -117,6 +123,7 @@
         uint8_t _scoreindex;
         uint8_t _priority;
         uint32_t _start;
+        bool _autoloop=false;
         bool _playing = false;
         bool (*_buzz)(uint16_t freq, uint16_t duration, uint8_t priority);
     };

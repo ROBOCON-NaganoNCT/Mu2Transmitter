@@ -24,9 +24,9 @@ namespace buzzer{
             p.stop();
         }
     }
-    uint8_t play(Note *score,uint8_t buflength,uint8_t priority){
+    uint8_t play(Note *score,uint8_t buflength,uint8_t priority,bool autoloop){
         for(int i=0;i<player_size;i++){
-            if(players[i].play(score,buflength,priority))return i;
+            if(players[i].play(score,buflength,priority,autoloop))return i;
         }
         return 255;
     }

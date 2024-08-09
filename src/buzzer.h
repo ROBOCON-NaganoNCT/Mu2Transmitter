@@ -58,7 +58,7 @@ namespace buzzer
     //ブザー管理インターフェース
     void init();//初期化
     void clear();//全てのブザー・再生を停止
-    uint8_t play(Note *score, uint8_t buflength, uint8_t priority = 0);//楽譜再生
+    uint8_t play(Note *score, uint8_t buflength, uint8_t priority = 0,bool autoloop = false);//楽譜再生
     void buzzForce(Note score);//強制発声
     bool buzz(uint16_t freq, uint16_t duration, uint8_t priority = 0);//単発発声
     bool buzz(Note score, uint8_t priority = 0);//単発発声

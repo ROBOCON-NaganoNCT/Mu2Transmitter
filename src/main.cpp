@@ -33,7 +33,7 @@ Packetizer packetizer;
 struct QueueData{
   uint8_t Mudata[12];
   uint8_t len;
-  int config[7];
+  int8_t config[8];
 
 };
 enum mu_config_items{
@@ -43,19 +43,20 @@ enum mu_config_items{
   TargetID,
   Channel ,
   Mode,
-  Frequency
+  Frequency,
+  Initial
 };
 
 struct ConfigData{
-  int configdata[7];
+  int8_t configdata[8];
 };
 
 struct EEPROM_data{
-  int config[7];
+  int8_t config[8];
   char check[10];
 };
 
-int frequency = 20;
+int16_t frequency = 20;
 
 uint8_t generate_mudata(uint8_t *buf, bool emergency,int mode){//最大１２バイト
 
@@ -109,7 +110,7 @@ void main_task(void *pvParameters) {
   ConfigData result_config;
   char inchar;
 
-  int lasttime = 0;
+  int32_t lasttime = 0;
     
   while (1){
     if (millis() - lasttime > 15){
@@ -128,14 +129,11 @@ void main_task(void *pvParameters) {
       xQueueSend(main_TO_MuQueue,&queue_send_data,0);
       lasttime = millis();
     }
-    
-
-    
 
   if (Serial1.available()) {
 
     inchar = Serial1.read();
-    // Serial.printf("%c",inchar);
+    Serial.printf("%c",inchar);
 
   }
   vTaskDelay(1);
@@ -150,8 +148,8 @@ void main_task(void *pvParameters) {
 void Mu(void *pvParameters){
   Serial1.begin(19200,SERIAL_8N1,Mu_TXD,Mu_RXD);
 
-  int lasttime = 0;
-  int lastconfig[5];
+  int32_t lasttime = 0;
+  int8_t lastconfig[8]={0,0,0,0,0,0,0,0};
 
   MUWrapper mu(SendData);
 
@@ -166,13 +164,18 @@ void Mu(void *pvParameters){
       
       xQueueReceive(main_TO_MuQueue,&queue_data,0);
 
-      for (int i = 0; i < queue_data.len; i++){
-        Serial.printf("%d ",queue_data.Mudata[i]);
-      }
-      Serial.print("\n");
+      // for (int i = 0; i < queue_data.len; i++){
+      //   Serial.printf("%d ",queue_data.Mudata[i]);
+      // }
+      // Serial.print("\n");
 
       //送信
       mu.send(queue_data.Mudata,queue_data.len);
+      if (memcmp(lastconfig,queue_data.config,sizeof(queue_data.config)) != 0){
+        mu.setParams(queue_data.config[GroupID],queue_data.config[Channel],queue_data.config[TargetID],queue_data.config[DeviceID]);
+        memcpy(&lastconfig, &queue_data.config, sizeof(queue_data.config));
+      }
+      
       lasttime = millis();
     }
     
@@ -189,36 +192,40 @@ void Display(void *pvParameters){
   #define OLED_RST_PIN -1      // Reset pin (-1 if not available)
   
   bool menu = false;
-  int lasttime = 0;
-  int wiilasttime = 0;
-  int page = 0;
+  int32_t buzzer_last = 0;
+  int32_t lasttime = 0;
+  int32_t wiilasttime = 0;
+  int8_t page = 0;
 
   buzzer::init();
-  int8_t player_index = buzzer::play(buzzer_score::potato,sizeof(buzzer_score::potato),10);
+  uint8_t player_index = 255;
   
-  String menu_items[7] = {
+  String menu_items[8] = {
     "userid",
     "groupid",
     "deviceid",
     "targetid",
     "channel" ,
     "mode",
-    "frequency"
+    "frequency",
+    "initial"
   };
-  int config_items[7][45] = {
+  int16_t config_items[8][45] = {
     {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45},
     {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45},
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44},
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44},
     {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46},
     {5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5, 12, 5},
-    {10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40}
-  };
+    {10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40, 60, 80, 100, 1000, 10, 20, 40},
+    {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0}
+};
+
 
 
   ConfigData result_config;
-  int default_config[7] ={0,3,0,1,0,0,0};
-  int config[7];
+  int8_t default_config[8] ={0,3,0,1,0,0,0,0};
+  int8_t config[8];
   EEPROM_data eeprom_data;
   EEPROM.begin(sizeof(EEPROM)+20U);
   EEPROM.get(0, eeprom_data);
@@ -236,7 +243,7 @@ void Display(void *pvParameters){
   Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\nFrequency = %02x\n",config_items[UserID][config[0]],config_items[GroupID][config[1]],config_items[DeviceID][config[2]]
         ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
   
-  for (int i = 0;i < 7;i++){
+  for (int i = 0;i < 8;i++){
     result_config.configdata[i] = config_items[i][config[i]];
   }
 
@@ -244,7 +251,7 @@ void Display(void *pvParameters){
         
   xQueueOverwrite(config_TO_mainQueue,&result_config);
 
-  int select_menu_count = 0;
+  int8_t select_menu_count = 0;
   
   //コントローラー
   controller::ControllerData controllerdata[2] ;
@@ -286,6 +293,7 @@ void Display(void *pvParameters){
       display.clearDisplay();
       if (btn.isHold(EMERGENCY_BTN) == true){
         buzzer::stopPlayer(player_index);
+        player_index = 255;
 
         if (menu == false){
           display.setTextSize(2);               //フォントサイズは2(番目に小さい)
@@ -304,7 +312,7 @@ void Display(void *pvParameters){
           display.print("MENU");
           display.drawLine(0,10,128,10,WHITE);
 
-          for (int i =page*5; i < 7; i++){
+          for (int i =page*5; i < 8; i++){
 
             display.setCursor(2, 10*(i-(page*5)+1)+1);
 
@@ -314,7 +322,7 @@ void Display(void *pvParameters){
               display.print(menu_items[i]);
 
             }else{
-              display.setTextColor(SSD1306_WHITE);
+              display.setTextColor(SSD1306_WHITE);  
               display.print(menu_items[i]);
               
             }
@@ -328,7 +336,11 @@ void Display(void *pvParameters){
           }
         }
       }else{
-        player_index = buzzer::play(buzzer_score::potato,sizeof(buzzer_score::potato),10);
+        
+        
+        if (player_index == 255){
+          player_index = buzzer::play(buzzer_score::potato,3,10,true);
+        }
         display.setTextSize(2);     
         display.setCursor(10, 15);
         display.fillRect(0, 0, 128, 64, WHITE);
@@ -343,9 +355,9 @@ void Display(void *pvParameters){
     }
 
     if (millis() - wiilasttime  > 15){
-      // if (wii.update(controllerdata[0]) == true){
-      //   xQueueOverwrite(controller_TO_mainQueue,&controllerdata[0]);
-      // }
+      if (wii.update(controllerdata[0]) == true){
+        xQueueOverwrite(controller_TO_mainQueue,&controllerdata[0]);
+      }
 
       // if (wii1.update(controllerdata[1]) == true){
       //   xQueueOverwrite(controller1_TO_mainQueue,&controllerdata[1]);
@@ -362,8 +374,12 @@ void Display(void *pvParameters){
       menu = !menu;
       if (menu == false){
 
-        Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\nFrequency = %02x\n",config_items[UserID][config[0]],config_items[GroupID][config[1]],config_items[DeviceID][config[2]]
-        ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
+        if(config_items[Initial][config[Initial]] == 1){
+          memcpy(config, default_config, sizeof(default_config));
+        }
+
+        // Serial.printf("UI = %02x\nGI = %02x\nEI = %02x\nDI = %02x\nCH = %02x\nMODE = %02x\nFrequency = %02x\n",config_items[UserID][config[0]],config_items[GroupID][config[1]],config_items[DeviceID][config[2]]
+        // ,config_items[TargetID][config[3]],config_items[Channel][config[4]],config_items[Mode][config[5]],config_items[Frequency][config[6]]);
 
 
         // EEPROMに設定を保存する。
@@ -372,7 +388,7 @@ void Display(void *pvParameters){
         EEPROM.put(0, eeprom_data);
         EEPROM.commit();   //EEPROMに書き込み
 
-        for (int i = 0;i < 7;i++){
+        for (int i = 0;i < 8;i++){
           result_config.configdata[i] = config_items[i][config[i]];
         }
 
@@ -387,7 +403,7 @@ void Display(void *pvParameters){
       if (btn.isPressed(FRONT_BTNB)){
         buzzer::buzz(442,100,255U);
         select_menu_count++;
-        select_menu_count = select_menu_count % 7;
+        select_menu_count = select_menu_count % 8;
         page = select_menu_count/5;
 
       }
