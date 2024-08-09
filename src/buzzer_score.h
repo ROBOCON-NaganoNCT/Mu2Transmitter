@@ -13,10 +13,11 @@
 namespace buzzer_score
 {
     // 「アレ」
-    Note potato[3] = {
+    Note potato[4] = {
         {784, 0, 25},
         {698, 25, 25},
         {784, 50, 25},
+        {0,75,25}
     };
 
     // 低電圧

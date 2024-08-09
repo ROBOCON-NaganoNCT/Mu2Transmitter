@@ -103,12 +103,15 @@
                 return false;
             while (millis() - _start >= _score[_scoreindex].start * 10)
             {
+                if(_score[_scoreindex].freq){
                 _buzz(_score[_scoreindex].freq, _score[_scoreindex].duration * 10, _priority);
+                }
                 _scoreindex++;
-                if (_scoreindex >= _buflength)
+                if (_scoreindex >_buflength)
                 {
                     if(_autoloop){
                         _scoreindex=0;
+                        _start=millis();
                         return true;
                     }
                     stop();

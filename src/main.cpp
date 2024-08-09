@@ -337,9 +337,8 @@ void Display(void *pvParameters){
         }
       }else{
         
-        
         if (player_index == 255){
-          player_index = buzzer::play(buzzer_score::potato,3,10,true);
+          player_index = buzzer::play(buzzer_score::hotaru,111,10,true);
         }
         display.setTextSize(2);     
         display.setCursor(10, 15);
